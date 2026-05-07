@@ -1,0 +1,8 @@
+{
+  "telegram_token": "your_telegram_bot_token_here",
+  "channel_username": "your_telegram_channel_username_without_at",
+  "elemsocial_email": "your_elemsocial_login_email@example.com",
+  "elemsocial_password": "your_elemsocial_account_password",
+  "admin_chat_id": null,
+  "ws_url": "wss://ws.elemsocial.com/user_api_legacy"
+}
