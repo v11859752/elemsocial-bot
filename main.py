@@ -31,7 +31,6 @@ WS_URL = config.get("ws_url", "wss://ws.elemsocial.com/user_api_legacy")
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-# Настройка сессии с отключенной проверкой SSL
 class SSLAdapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
         ctx = ssl.create_default_context()
@@ -126,11 +125,9 @@ class ElemsocialClient:
         return True
 
     async def create_post_with_photo(self, text: str, photo_data: bytes, filename: str = "photo.jpg") -> Tuple[bool, str]:
-        """Публикация поста с фото - отправляем файл прямо в posts/add"""
         if not self.connected:
             return False, "Not authorized"
         
-        # Формируем payload с файлом как в примере разработчика
         files = [
             {
                 "name": filename,
@@ -140,7 +137,7 @@ class ElemsocialClient:
         
         payload = {
             "text": text,
-            "files": files  # Отправляем файлы прямо в payload
+            "files": files
         }
         
         logger.info(f"Sending post with photo, payload size: {len(photo_data)} bytes")
@@ -149,7 +146,7 @@ class ElemsocialClient:
             "type": "social",
             "action": "posts/add",
             "payload": payload
-        }, timeout=120)  # Увеличиваем таймаут для фото
+        }, timeout=120)
         
         if resp and resp.get("status") == "success":
             logger.info(f"Post with photo published successfully!")
@@ -160,7 +157,6 @@ class ElemsocialClient:
             return False, error_msg
 
     async def create_post(self, text: str) -> Tuple[bool, str]:
-        """Публикация текстового поста"""
         if not self.connected:
             return False, "Not authorized"
             
@@ -220,7 +216,6 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 client = ElemsocialClient()
 
 def safe_send_message(chat_id: int, text: str):
-    """Безопасная отправка сообщения"""
     try:
         bot.send_message(chat_id, text, parse_mode=None)
     except Exception as e:
@@ -230,19 +225,15 @@ def is_allowed_user(message: Message) -> bool:
     user_id = message.from_user.id
     if user_id != ALLOWED_USER_ID:
         logger.warning(f"Unauthorized access attempt from user {user_id}")
-        safe_send_message(message.chat.id, "❌ Нет доступа")
+        safe_send_message(message.chat.id, "❌ Access denied")
         return False
     return True
 
 def download_telegram_photo(file_id: str) -> Tuple[Optional[bytes], Optional[str]]:
-    """Скачивает фото из Telegram, возвращает (данные, расширение)"""
     try:
         file_info = bot.get_file(file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        
-        # Определяем расширение файла
         ext = file_info.file_path.split('.')[-1] if '.' in file_info.file_path else 'jpg'
-        
         return downloaded_file, ext
     except Exception as e:
         logger.error(f"Failed to download photo: {e}")
@@ -256,8 +247,8 @@ def handle_start(message: Message):
     safe_send_message(
         message.chat.id,
         "🤖 Elemsocial Bot\n\n"
-        "Отправьте текст или фото для публикации в Elemsocial.\n\n"
-        f"Статус: {'✅ Connected' if client.connected else '🔄 Connecting...'}"
+        "Send text or photo to publish on Elemsocial.\n\n"
+        f"Status: {'✅ Connected' if client.connected else '🔄 Connecting...'}"
     )
 
 @bot.message_handler(commands=['status'])
@@ -274,13 +265,13 @@ def handle_photo(message: Message):
         return
     
     caption = message.caption or ""
-    photo = message.photo[-1]  # Берём фото в максимальном качестве
+    photo = message.photo[-1]
     
-    safe_send_message(message.chat.id, "📸 Получил фото, публикую в Elemsocial...")
+    safe_send_message(message.chat.id, "📸 Photo received, publishing to Elemsocial...")
     
     photo_data, ext = download_telegram_photo(photo.file_id)
     if not photo_data:
-        safe_send_message(message.chat.id, "❌ Не удалось скачать фото")
+        safe_send_message(message.chat.id, "❌ Failed to download photo")
         return
     
     try:
@@ -288,15 +279,15 @@ def handle_photo(message: Message):
             client.create_post_with_photo(caption, photo_data, f"photo.{ext}"), 
             loop
         )
-        success, err_msg = future.result(timeout=90)  # Больше времени для фото
+        success, err_msg = future.result(timeout=90)
         
         if success:
-            safe_send_message(message.chat.id, "✅ Фото опубликовано в Elemsocial!")
+            safe_send_message(message.chat.id, "✅ Photo published on Elemsocial!")
         else:
-            safe_send_message(message.chat.id, f"❌ Ошибка: {err_msg}")
+            safe_send_message(message.chat.id, f"❌ Error: {err_msg}")
     except Exception as e:
         logger.error(f"Exception: {e}")
-        safe_send_message(message.chat.id, f"❌ Ошибка: {str(e)[:100]}")
+        safe_send_message(message.chat.id, f"❌ Error: {str(e)[:100]}")
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message: Message):
@@ -307,21 +298,20 @@ def handle_text(message: Message):
     if not text or text.startswith('/'):
         return
     
-    safe_send_message(message.chat.id, "📝 Публикую текст в Elemsocial...")
+    safe_send_message(message.chat.id, "📝 Publishing text to Elemsocial...")
     
     try:
         future = asyncio.run_coroutine_threadsafe(client.create_post(text), loop)
         success, err_msg = future.result(timeout=60)
         
         if success:
-            safe_send_message(message.chat.id, "✅ Текст опубликован в Elemsocial!")
+            safe_send_message(message.chat.id, "✅ Text published on Elemsocial!")
         else:
-            safe_send_message(message.chat.id, f"❌ Ошибка: {err_msg}")
+            safe_send_message(message.chat.id, f"❌ Error: {err_msg}")
     except Exception as e:
         logger.error(f"Exception: {e}")
-        safe_send_message(message.chat.id, f"❌ Ошибка: {str(e)[:100]}")
+        safe_send_message(message.chat.id, f"❌ Error: {str(e)[:100]}")
 
-# Асинхронный цикл
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
